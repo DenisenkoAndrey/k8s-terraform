@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash /usr/bin/virsh
 
 if grep -wq "terraform_new_worker_1" ansible/playbooks/hosts; then
    > /dev/null    
