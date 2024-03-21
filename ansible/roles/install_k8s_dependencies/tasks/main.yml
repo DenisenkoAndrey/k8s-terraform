@@ -1,0 +1,134 @@
+---
+# tasks file for install_k8s_dependencies
+- name: Set system hostname
+  command: hostnamectl set-hostname {{ inventory_hostname }}
+
+- name: Create containerd config file
+  file:
+    path: /etc/modules-load.d/containerd.conf
+    state: touch
+
+- name: Add conf for containerd
+  blockinfile:
+    path: /etc/modules-load.d/containerd.conf
+    block: |
+      overlay
+      br_netfilter
+
+- name: Modprobe
+  shell: |
+    sudo modprobe overlay
+    sudo modprobe br_netfilter
+
+- name: Set system configurations for Kubernetes networking
+  file:
+    path: /etc/sysctl.d/99-kubernetes-cri.conf
+    state: touch
+
+- name: Add conf for containerd
+  blockinfile:
+    path: /etc/sysctl.d/99-kubernetes-cri.conf
+    block: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.ipv4.ip_forward = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+
+- name: Apply new settings
+  command: sudo sysctl --system
+
+- name: Disable swap
+  shell: |
+    sudo swapoff -a
+    sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+- name: Add DNS addresses
+  blockinfile:
+    path: /etc/systemd/resolved.conf
+    block: |
+      DNS=8.8.8.8 8.8.4.4
+      FallbackDNS=1.1.1.1 1.0.0.1
+
+- name: Apply DNS settings
+  command: sudo systemctl restart systemd-resolved.service
+
+- name: Update repositories
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+    force_apt_get: true
+
+- name: Install common packages
+  apt:
+    pkg: "{{ packages }}"
+    state: present
+
+- name: Add docker's apt-key
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker-apt-keyring.asc
+    mode: "0644"
+    force: true
+
+- name: Add docker's apt repository
+  apt_repository:
+    repo: "deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }} signed-by=/etc/apt/keyrings/docker-apt-keyring.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Add kubernetes's apt-key
+  get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    mode: "0644"
+    force: true
+
+- name: Add kubernetes's apt repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+    state: present
+
+- name: Update repositories
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+    force_apt_get: true
+
+- name: Install Containerd
+  apt:
+    name: containerd.io
+    state: present
+
+- name: Create Containerd directory
+  file:
+    path: /etc/containerd
+    state: directory
+
+- name: Add Containerd configuration
+  shell: /usr/bin/containerd config default > /etc/containerd/config.toml
+
+- name: Configuring the systemd cgroup driver for containerd
+  lineinfile:
+    path: /etc/containerd/config.toml
+    regexp: "            SystemdCgroup = false"
+    line: "            SystemdCgroup = true"
+
+- name: Enable the containerd service and start it
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: yes
+    daemon-reload: yes
+
+- name: Install kebernetes packages
+  apt:
+    pkg: "{{ kubernetes }}"
+    state: present
+    update_cache: true
+    force: yes
+
+- name: Enable the kubelet service, and enable it persistently
+  service:
+    name: kubelet
+    enabled: yes
+
+- name: Reboot and wait for reboot to complete
+  reboot:

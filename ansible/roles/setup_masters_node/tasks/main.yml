@@ -1,0 +1,67 @@
+---
+# tasks file for setup_masters_node
+- name: Create an empty file for kubeadm configuring
+  copy:
+    content: ""
+    dest: /etc/kubernetes/kubeadm-config.yaml
+    force: no
+
+- name: Configuring the container runtime including its cgroup driver
+  blockinfile:
+    path: /etc/kubernetes/kubeadm-config.yaml
+    block: |
+      kind: ClusterConfiguration
+      apiVersion: kubeadm.k8s.io/v1beta3
+      networking:
+        podSubnet: "10.244.0.0/16"
+      ---
+      kind: KubeletConfiguration
+      apiVersion: kubelet.config.k8s.io/v1beta1
+      runtimeRequestTimeout: "15m"
+      cgroupDriver: "systemd"
+      systemReserved:
+        cpu: 100m
+        memory: 350M
+      kubeReserved:
+        cpu: 100m
+        memory: 50M
+      enforceNodeAllocatable:
+      - pods
+
+- name: Initialize the cluster
+  shell: sudo kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=all >> cluster_initialized.log
+  args:
+    chdir: $HOME
+    creates: cluster_initialized.log
+
+- name: Create .kube directory
+  become: true
+  become_user: andrey
+  file:
+    path: $HOME/.kube
+    state: directory
+    mode: 0755
+
+- name: Copy admin.conf to user's kube config
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/andrey/.kube/config
+    remote_src: yes
+    owner: andrey
+
+- name: Install pod network
+  become: true
+  become_user: andrey
+  shell: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml >> pod_network_setup.log
+  args:
+    chdir: $HOME
+    creates: pod_network_setup.log
+
+- name: Get join command
+  shell: kubeadm token create --print-join-command
+  register: join_command_raw
+  delegate_to: "{{ groups['masters'][0] }}"
+
+- name: Set join command
+  set_fact:
+    join_command: "{{ join_command_raw.stdout_lines[0] }}"

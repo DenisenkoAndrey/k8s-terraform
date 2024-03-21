@@ -1,0 +1,13 @@
+[masters]
+terraformmaster_1 ansible_host=192.168.100.101 ansible_user=andrey
+
+[workers]
+terraformworker_1 ansible_host=192.168.100.102 ansible_user=andrey
+terraformworker_2 ansible_host=192.168.100.103 ansible_user=andrey
+
+[k8s_cluster:children]
+masters
+workers
+
+[add_new_workers]
+terraform_new_worker_1 ansible_host=192.168.100.104 ansible_user=andrey

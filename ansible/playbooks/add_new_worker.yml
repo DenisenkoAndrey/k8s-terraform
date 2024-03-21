@@ -1,0 +1,9 @@
+---
+- hosts: add_new_workers
+  remote_user: andrey
+  become: true
+  gather_facts: true
+  connection: ssh
+  roles:
+    - install_k8s_dependencies
+    - add_new_worker_node

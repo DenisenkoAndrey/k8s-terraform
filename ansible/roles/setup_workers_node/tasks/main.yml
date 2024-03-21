@@ -1,0 +1,10 @@
+---
+# tasks file for setup_workers_node
+- name: TCP port 6443 on master is reachable from workers
+  wait_for: "host={{ hostvars[groups['masters'][0]]['ansible_default_ipv4']['address'] }} port=6443 timeout=1"
+
+- name: Join cluster
+  shell: "{{ hostvars[groups['masters'][0]].join_command }} >> node_joined.log"
+  args:
+    chdir: /home/andrey
+    creates: node_joined.log

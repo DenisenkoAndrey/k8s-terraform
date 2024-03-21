@@ -1,0 +1,5 @@
+---
+- hosts: masters
+  become: true
+  roles:
+    - setup_masters_node
